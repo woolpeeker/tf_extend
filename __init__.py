@@ -23,3 +23,4 @@ from tf_extended.image import *
 from tf_extended.math import *
 from tf_extended.anchor import *
 from tf_extended.misc import *
+from tf_extended.tfrecord import *

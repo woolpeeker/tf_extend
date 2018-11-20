@@ -18,7 +18,7 @@ def get_checkpoint_dir(path='./checkpoints', fold='run', num=None):
     tf.logging.info('get_checkpoint_dir: %s'%result_path)
     return result_path
 
-def lr_plateau_decay(lr=0.01,decay=0.99, min_lr=1e-6, loss=None, scope='lr_plateau_decay'):
+def lr_plateau_decay(lr=0.01,decay=0.999, min_lr=1e-5, loss=None, scope='lr_plateau_decay'):
     with tf.name_scope(scope):
         his_len = 10
         local_lr = tf.get_local_variable(name='local_lr', dtype=tf.float32,
@@ -29,14 +29,18 @@ def lr_plateau_decay(lr=0.01,decay=0.99, min_lr=1e-6, loss=None, scope='lr_plate
                                              initializer=tf.zeros([his_len])-1.0)
         if loss is None:
             loss = tf.losses.get_total_loss()
-        update_history = tf.assign(his_loss[loss_idx], loss)
-        with tf.control_dependencies([update_history]):
-            update_idx = tf.assign(loss_idx, tf.mod(loss_idx + 1, his_len))
-        with tf.control_dependencies([update_idx]):
-            updated_lr = tf.cond(pred=loss>tf.reduce_mean(his_loss),
-                                 true_fn=lambda: tf.assign(local_lr, local_lr*decay),
-                                 false_fn=lambda: local_lr)
-        lr = tf.maximum(updated_lr, min_lr)
-        lr = tf.identity(lr)
+        def true_fn():
+            update_history = tf.assign(his_loss[loss_idx], loss)
+            with tf.control_dependencies([update_history]):
+                update_idx = tf.assign(loss_idx, tf.mod(loss_idx + 1, his_len))
+            with tf.control_dependencies([update_idx]):
+                updated_lr = tf.cond(pred=loss>tf.reduce_mean(his_loss),
+                                     true_fn=lambda: tf.assign(local_lr, local_lr*decay),
+                                     false_fn=lambda: local_lr)
+            lr = tf.maximum(updated_lr, min_lr)
+            return lr
+        lr = tf.cond(pred=tf.equal(tf.mod(tf.train.get_global_steps(), 100), 0),
+                     true_fn=true_fn,
+                     false_fn=lambda: tf.identity(local_lr))
         tf.summary.scalar('lr_plateau_decay', lr)
     return lr
